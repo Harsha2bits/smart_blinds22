@@ -90,10 +90,10 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   // Send Debug log message to the serial port
   Serial.printf("Received message from: %s\n",macStr);
   
-  Serial.printf(" Board Id : %i ", receiveData.id);
-  Serial.printf(" Board Id : %i ", receiveData.position);
-  Serial.printf(" Board Id : %i ", receiveData.steps);
-  Serial.printf(" Board Id : %s ", receiveData.status);
+  Serial.printf(" Board Id : %i \n ", receiveData.id);
+  Serial.printf(" Blind Position : %i \n", receiveData.position);
+  Serial.printf(" Blind Steps : %i \n", receiveData.steps);
+  Serial.printf(" Blind Status : %s \n", receiveData.status);
   received = 1;
   return;
   }
@@ -105,11 +105,11 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 void readEncoder() {
   int dtValue = digitalRead(ENCODER_DT);
-  if (dtValue == HIGH && position !=2 ) {
+  if (dtValue == HIGH && counter<=128 ) {
     counter++; // Clockwise
     //myStepper.step(counter * 4);
   }
-  if (dtValue == LOW && position !=0) {
+  if (dtValue == LOW && counter>=0) {
     counter--; // Counterclockwise
     //myStepper.step(-counter * 4);
   }
@@ -336,7 +336,7 @@ void loop()
         if(received==1)
         {
           Serial.println("Executed received data");
-          received == 0;
+          received = 0;
         }
     }
 }
