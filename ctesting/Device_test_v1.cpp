@@ -17,15 +17,19 @@ const int stepsPerRevolution = 2048;  // change this to fit the number of steps 
 Stepper myStepper(stepsPerRevolution, IN1, IN3, IN2, IN4);
 
 
+//sleep
+#define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP 3
+
 // Encoder
 
 #define ENCODER_CLK 32
 #define ENCODER_DT  33
 #define ENCODER_SW  25
 
-int counter = 0;
-int counterprev = 0;
-int position = 0; // defining position of stepper as 1,2,3
+RTC_DATA_ATTR int counter = 0;
+RTC_DATA_ATTR int counterprev = 0;
+RTC_DATA_ATTR int position = 0; // defining position of stepper as 1,2,3
 String command;
 
 int received = 0;
@@ -105,13 +109,13 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 void readEncoder() {
   int dtValue = digitalRead(ENCODER_DT);
-  if (dtValue == HIGH && counter<=128 ) {
+  if (dtValue == HIGH && counter<128 ) {
     counter++; // Clockwise
-    //myStepper.step(counter * 4);
+    //if (counter>=128) counter=128;
   }
-  if (dtValue == LOW && counter>=0) {
+  if (dtValue == LOW && counter>0) {
     counter--; // Counterclockwise
-    //myStepper.step(-counter * 4);
+    //if (counter<=0) counter=0;
   }
 
 
@@ -201,20 +205,16 @@ void setup() {
 
 
 myStepper.setSpeed(5);
-
-
-
 }
+
+
+void loop() {
 
 int change = 0;
 int countertemp = 0;
 
-
-void loop()
-{
-
     countertemp = getCounter();
-    if (countertemp!= counterprev)
+    if (countertemp!= counterprev && countertemp>=0 && countertemp <=128)
     {
         /*
     Each counter step is equal to 4 steps of stepper.
@@ -224,7 +224,7 @@ void loop()
      counter =128 is pisition 2
     */
         change = countertemp - counterprev;
-        myStepper.step(change * 4);
+        myStepper.step(change * 8);
 
         if (countertemp <=0)
             position = 0;
@@ -239,7 +239,7 @@ void loop()
         /* send data to Hub about new position */
         sendData.id = 2;
         sendData.position = position;
-        sendData.steps = countertemp * 4;
+        sendData.steps = countertemp * 8;
         sendData.status = "Manual";
         send_data();
     }
@@ -272,7 +272,7 @@ void loop()
 
             
             sendData.position = 1;
-            sendData.steps = 64 * 4;
+            sendData.steps = 64 * 8;
         }
         else if (command == "close")
         {
@@ -285,7 +285,7 @@ void loop()
                 counterprev = 128;
                 position = 2;
                 sendData.position = 2;
-                sendData.steps = 128 * 4;
+                sendData.steps = 128 * 8;
              }
              else if (countertemp <= 64)
               {
@@ -322,7 +322,7 @@ void loop()
 
 
 
-        myStepper.step(change * 4);
+        myStepper.step(change * 8);
         Serial.printf("Blinds %s",command);
         sendData.id = 1;
         sendData.status = command;
@@ -339,4 +339,14 @@ void loop()
           received = 0;
         }
     }
+
+
+digitalWrite(IN1, LOW);
+digitalWrite(IN2, LOW);
+digitalWrite(IN3, LOW);
+digitalWrite(IN4, LOW);
+
+//esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+//esp_deep_sleep_start();
+
 }
