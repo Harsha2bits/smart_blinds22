@@ -26,6 +26,9 @@ Stepper myStepper(stepsPerRevolution, IN1, IN3, IN2, IN4);
 int counter = 0;
 int counterprev = 0;
 int position = 0; // defining position of stepper as 1,2,3
+String command;
+
+int received = 0;
 
 //#include <stdio.h>
 using namespace std;
@@ -89,21 +92,12 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   
   Serial.printf(" Board Id : %i ", receiveData.id);
   Serial.printf(" Board Id : %i ", receiveData.position);
+  Serial.printf(" Board Id : %i ", receiveData.steps);
   Serial.printf(" Board Id : %s ", receiveData.status);
-  if(receiveData.status=="open"){
-    digitalWrite(LED_BUILTIN, HIGH);
-      myStepper.step(stepsPerRevolution/4);
-      Serial.println("Blinds open");
+  received = 1;
+  return;
+  }
 
-    return;
-  }
-  else if (receiveData.status=="close"){
-    digitalWrite(LED_BUILTIN, LOW);
-      myStepper.step(-stepsPerRevolution/4);
-      Serial.println("Blinds are closed");
-    return;
-  }
-}
 
 
 
@@ -214,6 +208,8 @@ myStepper.setSpeed(5);
 
 int change = 0;
 int countertemp = 0;
+
+
 void loop()
 {
 
@@ -228,17 +224,15 @@ void loop()
      counter =128 is pisition 2
     */
         change = countertemp - counterprev;
-        myStepper.step(change * 4)
+        myStepper.step(change * 4);
 
-            switch (countertemp)
-        {
-        case 0:
+        if (countertemp <=0)
             position = 0;
-        case 64:
+        else if (countertemp ==64)
             position = 1;
-        case 128:
+        else if (countertemp >=128)
             position = 2;
-        }
+        
 
         counterprev = countertemp;
 
@@ -250,31 +244,59 @@ void loop()
         send_data();
     }
 
+
     /* Manual Input Code */
-    if (Serial.available())
+    int serialavailable = Serial.available();
+    if (serialavailable!=0 || received == 1)
     {                                                  // if there is data comming
-        String command = Serial.readStringUntil('\n'); // read string until newline character
+        
+        
+        if (serialavailable!=0){
+        command = Serial.readStringUntil('\n'); // read string until newline character
         Serial.println("THE INPUT IS " + command);
+        }
+        
+        command = receiveData.status;
 
         if (command == "open")
         {
             digitalWrite(LED_BUILTIN, HIGH); // turn on LED
-            myStepper.step(stepsPerRevolution / 4);
-            Serial.println("Blinds open");
-            sendData.id = 1;
-            sendData.position = 0;
-            sendData.status = command;
-            send_data();
+            change = 64 - countertemp;
+            
+            
+            // resetting the counter to right position
+            counter = 64;
+            countertemp = 64;
+            counterprev = 64;
+            position = 1;
+
+            
+            sendData.position = 1;
+            sendData.steps = 64 * 4;
         }
         else if (command == "close")
         {
             digitalWrite(LED_BUILTIN, LOW); // turn off LED
-            myStepper.step(-stepsPerRevolution / 4);
-            Serial.println("Blinds are closed");
-            sendData.id = 1;
-            sendData.position = 0;
-            sendData.status = command;
-            send_data();
+            if (countertemp > 64)
+             {
+               change = 128 - countertemp;
+                counter = 128;
+                countertemp = 128;
+                counterprev = 128;
+                position = 2;
+                sendData.position = 2;
+                sendData.steps = 128 * 4;
+             }
+             else if (countertemp <= 64)
+              {
+                change = 0 - countertemp;
+                counter = 0;
+                countertemp = 0;
+                counterprev = 0;
+                position = 0;
+                sendData.position = 0;
+                sendData.steps = 0;
+              }
         }
         else if (command == "manual")
         {
@@ -293,11 +315,28 @@ void loop()
                 delay(200);
                 digitalWrite(LED_BUILTIN, HIGH); // turn off LED
             }
-            Serial.println("Blinds are closed");
-            sendData.id = 1;
+            Serial.println("Blinds are manual");
             sendData.status = command;
 
-            send_data();
+        }
+
+
+
+        myStepper.step(change * 4);
+        Serial.printf("Blinds %s",command);
+        sendData.id = 1;
+        sendData.status = command;
+        
+        if (serialavailable!=0)
+        {
+        send_data();
+        serialavailable = 0;
+        }
+
+        if(received==1)
+        {
+          Serial.println("Executed received data");
+          received == 0;
         }
     }
 }
