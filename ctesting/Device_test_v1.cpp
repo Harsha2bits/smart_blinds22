@@ -102,26 +102,22 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   return;
   }
 
+  int xounter = 0;
+  static uint8_t prevNextCode = 0;
+  static int8_t rot_enc_table[] = {0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0};
 
-
-
-
-
-void readEncoder() {
-  int dtValue = digitalRead(ENCODER_DT);
-  if (dtValue == HIGH && counter<128 ) {
-    counter++; // Clockwise
-    //if (counter>=128) counter=128;
-  }
-  if (dtValue == LOW && counter>0) {
-    counter--; // Counterclockwise
-    //if (counter<=0) counter=0;
-  }
-
-
-
-
-  
+  void readEncoder()
+  {
+    int dtValue = digitalRead(ENCODER_DT);
+    // int clValue = digitalRead(ENCODER_CLK);
+    int clValue = 0;
+    Serial.println("Encoder Position");
+    Serial.println(dtValue, clValue);
+    prevNextCode <<= 2;
+    if (dtValue) prevNextCode |= 0x02;
+    prevNextCode &= 0x0f;
+    int out= rot_enc_table[( prevNextCode & 0x0f )];
+    Serial.println(out);
 }
 
 // Get the counter value, disabling interrupts.
@@ -224,6 +220,8 @@ int countertemp = 0;
      counter =128 is pisition 2
     */
         change = countertemp - counterprev;
+        if (change>0) change = 1;
+        if (change<0)change = -1;
         myStepper.step(change * 8);
 
         if (countertemp <=0)
@@ -234,7 +232,9 @@ int countertemp = 0;
             position = 2;
         
 
-        counterprev = countertemp;
+        counter = counterprev +change;
+        counterprev = counter;
+        countertemp = counter;
 
         /* send data to Hub about new position */
         sendData.id = 2;
@@ -256,7 +256,8 @@ int countertemp = 0;
         Serial.println("THE INPUT IS " + command);
         }
         
-        command = receiveData.status;
+        
+        if (received==1) command = receiveData.status;
 
         if (command == "open")
         {
