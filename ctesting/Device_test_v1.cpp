@@ -4,17 +4,20 @@
 #include <WiFi.h>     //To Add Wifi Capabilities on ESP32
 #include <iostream>
 #include <string>
+#include <AccelStepper.h>
+#include <Encoder.h>
 
-#include <Stepper.h>
-
-const int stepsPerRevolution = 2048;  // change this to fit the number of steps per revolution
+const int stepsPerRevolution = 2038;  // change this to fit the number of steps per revolution
 
 // ULN2003 Motor Driver Pins
 #define IN1 19
 #define IN2 18
 #define IN3 5
 #define IN4 17
-Stepper myStepper(stepsPerRevolution, IN1, IN3, IN2, IN4);
+
+//Stepper myStepper(stepsPerRevolution, IN1, IN3, IN2, IN4);
+
+AccelStepper myStepper(AccelStepper::FULL4WIRE, IN1, IN3, IN2, IN4);
 
 
 //sleep
@@ -27,9 +30,20 @@ Stepper myStepper(stepsPerRevolution, IN1, IN3, IN2, IN4);
 #define ENCODER_DT  33
 #define ENCODER_SW  25
 
+Encoder myEnc(ENCODER_CLK, ENCODER_DT);
+
+
+
+
+
+
+
 RTC_DATA_ATTR int counter = 0;
 RTC_DATA_ATTR int counterprev = 0;
 RTC_DATA_ATTR int position = 0; // defining position of stepper as 1,2,3
+RTC_DATA_ATTR int motorPosition = 0;
+
+
 String command;
 
 int received = 0;
@@ -76,7 +90,6 @@ void send_data(){
 
 
 
-
 // function called when data is sent to print its status
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   Serial.print("\r\nLast Packet Send Status:\t");
@@ -102,40 +115,6 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   return;
   }
 
-  int xounter = 0;
-  static uint8_t prevNextCode = 0;
-  static int8_t rot_enc_table[] = {0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0};
-
-  void readEncoder()
-  {
-    int dtValue = digitalRead(ENCODER_DT);
-    // int clValue = digitalRead(ENCODER_CLK);
-    int clValue = 0;
-    Serial.println("Encoder Position");
-    Serial.println(dtValue, clValue);
-    prevNextCode <<= 2;
-    if (dtValue) prevNextCode |= 0x02;
-    prevNextCode &= 0x0f;
-    int out= rot_enc_table[( prevNextCode & 0x0f )];
-    Serial.println(out);
-}
-
-// Get the counter value, disabling interrupts.
-// This make sure readEncoder() doesn't change the value
-// while we're reading it.
-int getCounter() {
-  int result;
-  noInterrupts();
-  result = counter;
-  interrupts();
-  return result;
-}
-
-void resetCounter() {
-  noInterrupts();
-  counter = 0;
-  interrupts();
-}
 
 
 
@@ -149,12 +128,15 @@ void setup() {
 
   //Encoder
     // Initialize encoder pins
-  pinMode(ENCODER_CLK, INPUT);
-  pinMode(ENCODER_DT, INPUT);
+  //pinMode(ENCODER_CLK, INPUT);
+  //pinMode(ENCODER_DT, INPUT);
   pinMode(ENCODER_SW, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_CLK), readEncoder, FALLING);
+  //attachInterrupt(digitalPinToInterrupt(ENCODER_CLK), readEncoder, FALLING);
 
-
+  myStepper.setMaxSpeed(1000.0);
+	myStepper.setAcceleration(50.0);
+	myStepper.setSpeed(200);
+	//myStepper.moveTo(2038);
 
 
   
@@ -200,8 +182,12 @@ void setup() {
   }
 
 
-myStepper.setSpeed(5);
+//myStepper.setSpeed(5);
 }
+
+
+
+
 
 
 void loop() {
@@ -209,8 +195,8 @@ void loop() {
 int change = 0;
 int countertemp = 0;
 
-    countertemp = getCounter();
-    if (countertemp!= counterprev && countertemp>=0 && countertemp <=128)
+    countertemp = myEnc.read();
+    if (countertemp!= counterprev && countertemp>=0 && countertemp <=102)
     {
         /*
     Each counter step is equal to 4 steps of stepper.
@@ -219,30 +205,30 @@ int countertemp = 0;
      counter = 64 is pisition 1
      counter =128 is pisition 2
     */
-        change = countertemp - counterprev;
-        if (change>0) change = 1;
-        if (change<0)change = -1;
-        myStepper.step(change * 8);
+        //change = countertemp - counterprev;
+
+        motorPosition = countertemp * 10;
 
         if (countertemp <=0)
             position = 0;
-        else if (countertemp ==64)
+        else if (countertemp>=50 || countertemp<=52)
             position = 1;
-        else if (countertemp >=128)
+        else if (countertemp >=102)
             position = 2;
         
-
-        counter = counterprev +change;
-        counterprev = counter;
-        countertemp = counter;
+        counterprev = countertemp;
 
         /* send data to Hub about new position */
         sendData.id = 2;
         sendData.position = position;
-        sendData.steps = countertemp * 8;
+        sendData.steps = motorPosition;
         sendData.status = "Manual";
         send_data();
     }
+
+
+
+
 
 
     /* Manual Input Code */
@@ -262,41 +248,34 @@ int countertemp = 0;
         if (command == "open")
         {
             digitalWrite(LED_BUILTIN, HIGH); // turn on LED
-            change = 64 - countertemp;
             
-            
-            // resetting the counter to right position
-            counter = 64;
-            countertemp = 64;
-            counterprev = 64;
+            myEnc.write(51);
+            motorPosition = 51 * 10;
             position = 1;
-
-            
             sendData.position = 1;
-            sendData.steps = 64 * 8;
+            sendData.steps = motorPosition;
         }
         else if (command == "close")
         {
             digitalWrite(LED_BUILTIN, LOW); // turn off LED
-            if (countertemp > 64)
+            if (countertemp > 51)
              {
-               change = 128 - countertemp;
-                counter = 128;
-                countertemp = 128;
-                counterprev = 128;
+
+                myEnc.write(102);
+                motorPosition = 102 * 10;                
                 position = 2;
                 sendData.position = 2;
-                sendData.steps = 128 * 8;
+                sendData.steps = motorPosition;
              }
-             else if (countertemp <= 64)
+             else if (countertemp <= 51)
               {
-                change = 0 - countertemp;
-                counter = 0;
+                myEnc.write(0);
+                motorPosition = 0;
                 countertemp = 0;
                 counterprev = 0;
                 position = 0;
                 sendData.position = 0;
-                sendData.steps = 0;
+                sendData.steps = motorPosition;
               }
         }
         else if (command == "manual")
@@ -323,13 +302,21 @@ int countertemp = 0;
 
 
 
-        myStepper.step(change * 8);
-        Serial.printf("Blinds %s",command);
-        sendData.id = 1;
-        sendData.status = command;
+        //myStepper.step(change * 8);
+        myStepper.moveTo(motorPosition);
+
+
+
+
+
         
+
+        // resetting the flags 
         if (serialavailable!=0)
         {
+        Serial.printf("Blinds %s",command);
+        sendData.id = 2;
+        sendData.status = command;
         send_data();
         serialavailable = 0;
         }
