@@ -6,6 +6,9 @@
 #include <string>
 #include <AccelStepper.h>
 #include <Encoder.h>
+#include "AiEsp32RotaryEncoder.h"
+//#include <stdio.h>
+using namespace std;
 
 const int stepsPerRevolution = 2038;  // change this to fit the number of steps per revolution
 
@@ -15,9 +18,12 @@ const int stepsPerRevolution = 2038;  // change this to fit the number of steps 
 #define IN3 5
 #define IN4 17
 
+#define FULLSTEP 4
+#define HALFSTEP 8
+
 //Stepper myStepper(stepsPerRevolution, IN1, IN3, IN2, IN4);
 
-AccelStepper myStepper(AccelStepper::FULL4WIRE, IN1, IN3, IN2, IN4);
+AccelStepper myStepper(FULLSTEP, IN1, IN3, IN2, IN4);
 
 
 //sleep
@@ -26,38 +32,35 @@ AccelStepper myStepper(AccelStepper::FULL4WIRE, IN1, IN3, IN2, IN4);
 
 // Encoder
 
-#define ENCODER_CLK 32
-#define ENCODER_DT  33
-#define ENCODER_SW  25
-
-Encoder myEnc(ENCODER_CLK, ENCODER_DT);
+#define ROTARY_ENCODER_A_PIN 33
+#define ROTARY_ENCODER_B_PIN 32
+#define ROTARY_ENCODER_BUTTON_PIN 25
 
 
-
-
+#define ROTARY_ENCODER_STEPS 4
+AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN, ROTARY_ENCODER_BUTTON_PIN, -1, ROTARY_ENCODER_STEPS);
 
 
 
+
+//Register Memory Variables
 RTC_DATA_ATTR int counter = 0;
 RTC_DATA_ATTR int counterprev = 0;
 RTC_DATA_ATTR int position = 0; // defining position of stepper as 1,2,3
 RTC_DATA_ATTR int motorPosition = 0;
 
-
+// Other variables
 String command;
-
 int received = 0;
 
-//#include <stdio.h>
-using namespace std;
+
+//Communication Related
 
 //save the MAC Address in an array named broadcastAddress;
 uint8_t broadcastAddress[] = {0x24, 0xD7, 0xEB, 0x10, 0xE0, 0xC0}; //MAC address of my receiver
 
 // Peer info
 esp_now_peer_info_t peerInfo;
-
-
 
 /*define the data types of  the multiple variables structured and
 renamed all of it as struct_message*/
@@ -70,6 +73,11 @@ typedef struct struct_message {
 
 // Create a struct_message called myData
 struct_message sendData, receiveData;
+
+
+
+
+//Communication functions
 
 
 void formatMacAddress(const uint8_t *macAddr, char *buffer, int maxLength)
@@ -115,10 +123,44 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   return;
   }
 
+ //Encoder function
+
+ int getCounter()
+{
+    return (int)rotaryEncoder.readEncoder() ;
+}
+
+void setCounter(int i)
+{
+  rotaryEncoder.setEncoderValue(i);
+}
+
+void rotary_onButtonClick()
+{
+    static unsigned long lastTimePressed = 0;
+    if (millis() - lastTimePressed < 200)
+        return;
+    lastTimePressed = millis();
+
+    Serial.print("Resetting Counter Value ");
+    rotaryEncoder.setEncoderValue(51);
+}
+
+
+
+void IRAM_ATTR readEncoderISR()
+{
+    rotaryEncoder.readEncoder_ISR();
+}
 
 
 
 
+
+
+
+
+// Setup function
 
 
 void setup() {
@@ -130,40 +172,34 @@ void setup() {
     // Initialize encoder pins
   //pinMode(ENCODER_CLK, INPUT);
   //pinMode(ENCODER_DT, INPUT);
-  pinMode(ENCODER_SW, INPUT_PULLUP);
+  //pinMode(ENCODER_SW, INPUT_PULLUP);
   //attachInterrupt(digitalPinToInterrupt(ENCODER_CLK), readEncoder, FALLING);
-
-  myStepper.setMaxSpeed(1000.0);
-	myStepper.setAcceleration(50.0);
-	myStepper.setSpeed(200);
-	//myStepper.moveTo(2038);
-
-
+    rotaryEncoder.begin();
+    rotaryEncoder.setup(readEncoderISR);
+    rotaryEncoder.setBoundaries(0, 102, false); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
+    rotaryEncoder.setAcceleration(0);
+    rotaryEncoder.setEncoderValue(0); //set default to 92.1 MHz
   
-  //Set the baud rate for serial communication with ESP
-  Serial.begin(921600);
- 
-  // Set device as a Wi-Fi Station
-  WiFi.mode(WIFI_STA);//Starts the wifi
+  
+    myStepper.setMaxSpeed(1000.0);
+	  myStepper.setAcceleration(50.0);
+	  myStepper.setSpeed(200);
+	  myStepper.moveTo(2038);
+    myStepper.run();
 
-  // Init ESP-NOW and returns its status
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
+    // Set the baud rate for serial communication with ESP
+    Serial.begin(921600);
+
+    // Set device as a Wi-Fi Station
+    WiFi.mode(WIFI_STA); // Starts the wifi
+
+    // Init ESP-NOW and returns its status
+    if (esp_now_init() != ESP_OK)
+    {
+      Serial.println("Error initializing ESP-NOW");
+      return;
   }
 
-
-  // Set up Serial Monitor
-  Serial.begin(921600);
- 
-  // Set ESP32 as a Wi-Fi Station
-  WiFi.mode(WIFI_STA);
- 
-  // Initilize ESP-NOW
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("Error initializing ESP-NOW");
-    return;
-  }
  
   // Register the send callback
   esp_now_register_send_cb(OnDataSent);
@@ -195,7 +231,7 @@ void loop() {
 int change = 0;
 int countertemp = 0;
 
-    countertemp = myEnc.read();
+    countertemp = getCounter();
     if (countertemp!= counterprev && countertemp>=0 && countertemp <=102)
     {
         /*
@@ -249,7 +285,7 @@ int countertemp = 0;
         {
             digitalWrite(LED_BUILTIN, HIGH); // turn on LED
             
-            myEnc.write(51);
+            setCounter(51);
             motorPosition = 51 * 10;
             position = 1;
             sendData.position = 1;
@@ -261,7 +297,7 @@ int countertemp = 0;
             if (countertemp > 51)
              {
 
-                myEnc.write(102);
+                setCounter(102);
                 motorPosition = 102 * 10;                
                 position = 2;
                 sendData.position = 2;
@@ -269,7 +305,7 @@ int countertemp = 0;
              }
              else if (countertemp <= 51)
               {
-                myEnc.write(0);
+                setCounter(0);
                 motorPosition = 0;
                 countertemp = 0;
                 counterprev = 0;
@@ -303,22 +339,17 @@ int countertemp = 0;
 
 
         //myStepper.step(change * 8);
-        myStepper.moveTo(motorPosition);
-
-
-
-
-
         
 
-        // resetting the flags 
-        if (serialavailable!=0)
-        {
-        Serial.printf("Blinds %s",command);
-        sendData.id = 2;
-        sendData.status = command;
-        send_data();
-        serialavailable = 0;
+
+          // resetting the flags
+          if (serialavailable != 0)
+          {
+            Serial.printf("Blinds %s", command);
+            sendData.id = 2;
+            sendData.status = command;
+            send_data();
+            serialavailable = 0;
         }
 
         if(received==1)
@@ -329,11 +360,23 @@ int countertemp = 0;
     }
 
 
-digitalWrite(IN1, LOW);
-digitalWrite(IN2, LOW);
-digitalWrite(IN3, LOW);
-digitalWrite(IN4, LOW);
 
+          myStepper.moveTo(motorPosition);
+          myStepper.run();
+          
+          
+          
+           if(myStepper.distanceToGo()!=0)
+          {
+            myStepper.run();
+          }
+          else
+          {
+              digitalWrite(IN1, LOW);
+              digitalWrite(IN2, LOW);
+              digitalWrite(IN3, LOW);
+              digitalWrite(IN4, LOW);
+          }
 //esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
 //esp_deep_sleep_start();
 
