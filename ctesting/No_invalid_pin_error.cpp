@@ -46,7 +46,7 @@ AccelStepper myStepper(FULLSTEP, IN1, IN3, IN2, IN4);
 //sleep
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP 5
-#define wakeup_level 0
+// #define wakeup_level 0
 
 // Encoder
 
@@ -66,6 +66,9 @@ RTC_DATA_ATTR int counter = 0;
 RTC_DATA_ATTR int counterprev = 0;
 RTC_DATA_ATTR int position = 0; // defining position of stepper as 1,2,3
 RTC_DATA_ATTR int motorPosition = 0;
+RTC_DATA_ATTR int wakeup_level = 0;
+int interrupt = 0;
+static unsigned long lastEncoderChanged = 0;
 
 // Other variables
 String command;
@@ -284,6 +287,7 @@ int countertemp = 0;
      counter =128 is pisition 2
     */
         //change = countertemp - counterprev;
+        lastEncoderChanged = millis();
 
         motorPosition = countertemp * 10;
 
@@ -419,7 +423,38 @@ int countertemp = 0;
               digitalWrite(IN3, LOW);
               digitalWrite(IN4, LOW);
           }
-esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-esp_deep_sleep_start();
+// esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+// esp_deep_sleep_start();
+
+
+if(interrupt==1 || myStepper.distanceToGo()!=0 )
+    {
+    if (millis()-lastEncoderChanged > 7000 )
+    {
+      Serial.print(millis() - lastEncoderChanged > 7000);
+      Serial.println("Going to Sleep as no inpur received");
+      wakeup_level=!gpio_get_level(GPIO_NUM_33);
+      Serial.printf("Wakeup_level is:%i \n", wakeup_level);
+      esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+      esp_deep_sleep_start();
+      Serial.println("This should not be printed");
+
+    }
+    else
+      return;
+    }
+    else 
+    { 
+      Serial.println("Regular Sleep as no inpur received");
+      //wakeup_level=!gpio_get_level(GPIO_NUM_33);
+      //Serial.printf("Wakeup_level is:%i \n", wakeup_level);
+
+      esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+      esp_deep_sleep_start();
+      
+    }
+
+
+
 
 }
