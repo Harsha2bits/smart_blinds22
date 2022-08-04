@@ -9,7 +9,6 @@
 #include "AiEsp32RotaryEncoder.h"
 
 
-
 #include "esp_sleep.h"
 #include "esp_attr.h"
 #include "rom/rtc.h"
@@ -46,7 +45,8 @@ AccelStepper myStepper(FULLSTEP, IN1, IN3, IN2, IN4);
 
 //sleep
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP 3
+#define TIME_TO_SLEEP 5
+#define wakeup_level 0
 
 // Encoder
 
@@ -65,11 +65,7 @@ AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, 
 RTC_DATA_ATTR int counter = 0;
 RTC_DATA_ATTR int counterprev = 0;
 RTC_DATA_ATTR int position = 0; // defining position of stepper as 1,2,3
-//RTC_DATA_ATTR static unsigned long lastEncoderChanged = 0;
 RTC_DATA_ATTR int motorPosition = 0;
-static unsigned long lastEncoderChanged = 0;
-RTC_DATA_ATTR int wakeup_level = 0;
-int interrupt = 0;
 
 // Other variables
 String command;
@@ -178,6 +174,23 @@ void IRAM_ATTR readEncoderISR()
 
 
 
+//wakeup reason function
+void print_wakeup_reason(){
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
+    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+  }
+}
+
 
 
 
@@ -186,15 +199,9 @@ void IRAM_ATTR readEncoderISR()
 
 
 void setup() {
-  Serial.begin(921600);
+  
   //led
   pinMode(LED_BUILTIN, OUTPUT);
-
-
-  rtc_gpio_deinit(GPIO_NUM_33); // Deinitialize the pint as rtc pin
-
-
-
 
   //Encoder
     // Initialize encoder pins
@@ -206,42 +213,17 @@ void setup() {
     rotaryEncoder.setup(readEncoderISR);
     rotaryEncoder.setBoundaries(0, 102, false); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
     rotaryEncoder.setAcceleration(0);
-    rotaryEncoder.setEncoderValue(counterprev);
-
-    
-    if(esp_sleep_get_wakeup_cause()== ESP_SLEEP_WAKEUP_EXT0)
-    {
-      Serial.println("wakeup because of encoder");
-      rotaryEncoder.setEncoderValue(counterprev + 1);
-    } // set default to 92.1 MHz
-      else rotaryEncoder.setEncoderValue(counterprev);
-
-      myStepper.setCurrentPosition(motorPosition);
-      myStepper.setMaxSpeed(1000.0);
-      myStepper.setAcceleration(50.0);
-      myStepper.setSpeed(200);
-      // myStepper.moveTo(2038);
-      // myStepper.run();
-
-      //if (wakeup_level == -1)
-      //{
-        //wakeup_level = 0;
-  //}else{
-    //wakeup_level = !REG_GET_FIELD(RTC_CNTL_EXT_WAKEUP_CONF_REG, RTC_CNTL_EXT_WAKEUP0_LV);
-      //}
-
-
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_33, wakeup_level);
-
-
-
-
-
-
-
+    rotaryEncoder.setEncoderValue(0); //set default to 92.1 MHz
+  
+  
+    myStepper.setMaxSpeed(1000.0);
+	  myStepper.setAcceleration(50.0);
+	  myStepper.setSpeed(200);
+	  myStepper.moveTo(2038);
+    myStepper.run();
 
     // Set the baud rate for serial communication with ESP
-    
+    Serial.begin(921600);
 
     // Set device as a Wi-Fi Station
     WiFi.mode(WIFI_STA); // Starts the wifi
@@ -270,9 +252,15 @@ void setup() {
     return;
   }
 
-  Serial.println("Booted up");
 
-  // myStepper.setSpeed(5);
+
+
+//code for sleep interrupts
+
+esp_sleep_enable_ext0_wakeup(GPIO_NUM_33, wakeup_level);
+print_wakeup_reason();
+
+delay(3000);
 }
 
 
@@ -283,12 +271,10 @@ void setup() {
 void loop() {
 
 int change = 0;
-int countertemp = counterprev;
+int countertemp = 0;
 
     countertemp = getCounter();
-
-    Serial.printf("current counter: %i, prev counter: %i \n", countertemp, counterprev);
-    if (countertemp != counterprev && countertemp >= 0 && countertemp <= 102)
+    if (countertemp!= counterprev && countertemp>=0 && countertemp <=102)
     {
         /*
     Each counter step is equal to 4 steps of stepper.
@@ -298,9 +284,6 @@ int countertemp = counterprev;
      counter =128 is pisition 2
     */
         //change = countertemp - counterprev;
-        Serial.println("Entered encoder motor loop");
-
-        lastEncoderChanged = millis();
 
         motorPosition = countertemp * 10;
 
@@ -318,8 +301,7 @@ int countertemp = counterprev;
         sendData.position = position;
         sendData.steps = motorPosition;
         sendData.status = "Manual";
-        interrupt = 1;
-        // send_data();
+        send_data();
     }
 
 
@@ -437,40 +419,7 @@ int countertemp = counterprev;
               digitalWrite(IN3, LOW);
               digitalWrite(IN4, LOW);
           }
-
-
-
-    if(interrupt==1 || myStepper.distanceToGo()!=0 )
-    {
-    if (millis()-lastEncoderChanged > 7000 )
-    {
-      Serial.print(millis() - lastEncoderChanged > 7000);
-      Serial.println("Going to Sleep as no inpur received");
-      wakeup_level=!gpio_get_level(GPIO_NUM_33);
-      Serial.printf("Wakeup_level is:%i \n", wakeup_level);
-      esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-      esp_deep_sleep_start();
-      Serial.println("This should not be printed");
-
-    }
-    else
-      return;
-    }
-    else 
-    { 
-      Serial.println("Regular Sleep as no inpur received");
-      //wakeup_level=!gpio_get_level(GPIO_NUM_33);
-      //Serial.printf("Wakeup_level is:%i \n", wakeup_level);
-
-      esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-      esp_deep_sleep_start();
-      
-    }
-
-
-
-
-//esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-//esp_deep_sleep_start();
+esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+esp_deep_sleep_start();
 
 }
