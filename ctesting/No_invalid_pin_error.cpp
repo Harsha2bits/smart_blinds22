@@ -205,6 +205,7 @@ void setup() {
   
   //led
   pinMode(LED_BUILTIN, OUTPUT);
+  //rtc_gpio_deinit(GPIO_NUM_33);
 
   //Encoder
     // Initialize encoder pins
@@ -216,14 +217,23 @@ void setup() {
     rotaryEncoder.setup(readEncoderISR);
     rotaryEncoder.setBoundaries(0, 102, false); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
     rotaryEncoder.setAcceleration(0);
-    rotaryEncoder.setEncoderValue(0); //set default to 92.1 MHz
+    //rotaryEncoder.setEncoderValue(counterprev);
+
+    
+    if(esp_sleep_get_wakeup_cause()== ESP_SLEEP_WAKEUP_EXT0)
+    {
+      Serial.println("wakeup because of encoder");
+      rotaryEncoder.setEncoderValue(counterprev + 1);
+    } // set default to 92.1 MHz
+      else rotaryEncoder.setEncoderValue(counterprev);
   
-  
+    myStepper.setCurrentPosition(motorPosition);
+    
     myStepper.setMaxSpeed(1000.0);
 	  myStepper.setAcceleration(50.0);
 	  myStepper.setSpeed(200);
-	  myStepper.moveTo(2038);
-    myStepper.run();
+	  //myStepper.moveTo(2038);
+    //myStepper.run();
 
     // Set the baud rate for serial communication with ESP
     Serial.begin(921600);
@@ -263,7 +273,7 @@ void setup() {
 esp_sleep_enable_ext0_wakeup(GPIO_NUM_33, wakeup_level);
 print_wakeup_reason();
 
-delay(3000);
+//delay(3000);
 }
 
 
@@ -274,44 +284,46 @@ delay(3000);
 void loop() {
 
 int change = 0;
-int countertemp = 0;
+int countertemp=0;
 
     countertemp = getCounter();
     if (countertemp!= counterprev && countertemp>=0 && countertemp <=102)
     {
-        /*
-    Each counter step is equal to 4 steps of stepper.
-    So to make 90 degree turn we need 512 steps which is 128 steps
-     counter= 0 is position 0
-     counter = 64 is pisition 1
-     counter =128 is pisition 2
-    */
-        //change = countertemp - counterprev;
-        lastEncoderChanged = millis();
 
-        motorPosition = countertemp * 10;
+      interrupt = 1;
 
-        if (countertemp <=0)
-            position = 0;
-        else if (countertemp>=50 || countertemp<=52)
-            position = 1;
-        else if (countertemp >=102)
-            position = 2;
-        
-        counterprev = countertemp;
+      Serial.println("Entered encoder loop");
+      
+      /*
+  Each counter step is equal to 4 steps of stepper.
+  So to make 90 degree turn we need 512 steps which is 128 steps
+   counter= 0 is position 0
+   counter = 64 is pisition 1
+   counter =128 is pisition 2
+  */
+      // change = countertemp - counterprev;
+      lastEncoderChanged = millis();
 
-        /* send data to Hub about new position */
-        sendData.id = 2;
-        sendData.position = position;
-        sendData.steps = motorPosition;
-        sendData.status = "Manual";
-        send_data();
+      motorPosition = countertemp * 10;
+
+      if (countertemp <= 0)
+        position = 0;
+      else if (countertemp >= 50 || countertemp <= 52)
+        position = 1;
+      else if (countertemp >= 102)
+        position = 2;
+
+      counterprev = countertemp;
+
+      /* send data to Hub about new position */
+      sendData.id = 2;
+      sendData.position = position;
+      sendData.steps = motorPosition;
+      sendData.status = "Manual";
+
+      Serial.println(motorPosition);
+      Serial.println(myStepper.currentPosition());
     }
-
-
-
-
-
 
     /* Manual Input Code */
     int serialavailable = Serial.available();
@@ -408,7 +420,7 @@ int countertemp = 0;
 
 
           myStepper.moveTo(motorPosition);
-          myStepper.run();
+          //myStepper.run();
           
           
           
@@ -433,7 +445,7 @@ if(interrupt==1 || myStepper.distanceToGo()!=0 )
     {
       Serial.print(millis() - lastEncoderChanged > 7000);
       Serial.println("Going to Sleep as no inpur received");
-      wakeup_level=!gpio_get_level(GPIO_NUM_33);
+      //wakeup_level=!gpio_get_level(GPIO_NUM_25);
       Serial.printf("Wakeup_level is:%i \n", wakeup_level);
       esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
       esp_deep_sleep_start();
