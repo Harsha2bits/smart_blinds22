@@ -32,8 +32,8 @@ const int stepsPerRevolution = 2038;  // change this to fit the number of steps 
 // ULN2003 Motor Driver Pins
 #define IN1 19
 #define IN2 18
-#define IN3 5
-#define IN4 17
+#define IN3 17
+#define IN4 16
 
 #define FULLSTEP 4
 #define HALFSTEP 8
@@ -62,10 +62,10 @@ AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, 
 
 
 //Register Memory Variables
-RTC_DATA_ATTR int counter = 0;
-RTC_DATA_ATTR int counterprev = 0;
+RTC_DATA_ATTR int counter = 0;  //Stores new counter value
+RTC_DATA_ATTR int counterprev = 0; // stores previous counter value
 RTC_DATA_ATTR int position = 0; // defining position of stepper as 1,2,3
-RTC_DATA_ATTR int motorPosition = 0;
+RTC_DATA_ATTR int motorPosition = 0;  //stores motor position
 RTC_DATA_ATTR int wakeup_level = 0;
 int interrupt = 0;
 static unsigned long lastEncoderChanged = 0;
@@ -470,6 +470,10 @@ int serialavailable = Serial.available();
       Serial.println("Regular Sleep as no inpur received");
       //wakeup_level=!gpio_get_level(GPIO_NUM_33);
       //Serial.printf("Wakeup_level is:%i \n", wakeup_level);
+
+      //rtc_gpio_hold_en(GPIO_NUM_5);  // Adding code to hold pin value or else the led glows during sleep
+      //digitalWrite(GPIO_NUM_5, LOW);
+      //gpio_hold_en(GPIO_NUM_5);
 
       esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
       esp_deep_sleep_start();
