@@ -1,5 +1,16 @@
 # Automating Blinds Tilt
 
+- [Automating Blinds Tilt](#automating-blinds-tilt)
+  - [Code So Far documentation](#code-so-far-documentation)
+  - [Features to add](#features-to-add)
+    - [1. Calibration Step](#1-calibration-step)
+    - [2. MQTT Integration with ESP32.](#2-mqtt-integration-with-esp32)
+    - [3. Google Home Integration](#3-google-home-integration)
+  - [Known Issues](#known-issues)
+    - [1. ESP32 gets stuck after running for sometime.](#1-esp32-gets-stuck-after-running-for-sometime)
+    - [2. ESP32](#2-esp32)
+
+
 ## Code So Far documentation
 
 
