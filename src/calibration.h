@@ -11,10 +11,12 @@
 
 #include "Button2.h"
 #include "AiEsp32RotaryEncoder.h"
+#include "AccelStepper.h"
 #include "ledblinks.h"
+//#include "variables.h"
 
-bool calibraitonLoop(AiEsp32RotaryEncoder &enc, int ROTARY_ENCODER_BUTTON_PIN);
+bool calibraitonLoop(AiEsp32RotaryEncoder &enc, int buttonPin, AccelStepper &motor, long encMotorMultiplier);
 
-void calibration(AiEsp32RotaryEncoder &enc, int ROTARY_ENCODER_BUTTON_PIN);
+void calibration(AiEsp32RotaryEncoder &enc, int buttonPin, long &minenc, long &maxenc, AccelStepper &motor, long encMotorMultiplier);
 
 #endif

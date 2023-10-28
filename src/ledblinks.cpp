@@ -4,13 +4,13 @@
 void calibrateLed()
 {
 digitalWrite(LED_BUILTIN, HIGH); // turn off LED
-delay(200);
+delay(300);
 digitalWrite(LED_BUILTIN, LOW); // turn off LED
-delay(200);
+delay(300);
 }
 
 
-void positionConfirmaiton()
+void positionConfirmaitonLed()
 {
     for (int i = 0; i < 5; i++)
     {

@@ -6,11 +6,13 @@
 /////////////////////////////////////////////////////////////////
 #pragma once
 
-#ifndef ledblinks_h
-#define ledblinks_h
+#ifndef deepsleep_h
+#define deepsleep_h
+
+#include "esp_sleep.h"
 #include <Arduino.h>
 
-void calibrateLed();
-void positionConfirmaitonLed();
+void print_wakeup_reason();
+
 
 #endif
